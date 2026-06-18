@@ -237,6 +237,21 @@ FastAPI server on port 8080:
 
 ---
 
+## Meshtastic app over TCP (experimental)
+
+Connect the official Meshtastic phone apps (iOS / Android) straight to the Meshpoint over your LAN and use it as a node — channels, direct messages, node list, and map — the same way the apps talk to a physical Meshtastic device over WiFi. The Meshpoint serves the standard Meshtastic stream API on **TCP port 4403** and advertises itself over mDNS (`_meshtastic._tcp`) for auto-discovery.
+
+Off by default. Enable in `local.yaml`:
+
+```yaml
+tcp_api:
+  enabled: true
+```
+
+Then point the app at `<pi-ip>:4403` (or pick it from the app's discovered devices). Sending from the app requires `transmit.enabled`; otherwise the app connects read-only. See [Configuration > Meshtastic App over TCP](docs/CONFIGURATION.md#meshtastic-app-over-tcp-tcp_api) and the [design notes](docs/plans/TCP-CLIENT-API.md).
+
+---
+
 ## Updating
 
 Use this block whether you are on v0.6.x, v0.7.3, or already current. `install.sh` is idempotent on existing installs: it refreshes the venv (`pip install -r requirements.txt`), removes stale pre-v0.7.0 `.so` binaries if any remain, updates sudoers and the systemd unit, and does **not** require a reboot on upgrade.
