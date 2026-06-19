@@ -71,8 +71,10 @@ class _FakeTx:
     def meshtastic_enabled(self):
         return self._enabled
 
-    async def send_text(self, text, destination=0, channel=0, want_ack=False):
-        self.sent.append((text, destination, channel, want_ack))
+    async def send_text(
+        self, text, destination=0, channel=0, want_ack=False, packet_id=None
+    ):
+        self.sent.append((text, destination, channel, want_ack, packet_id))
         return _SendResult(self._enabled)
 
 
@@ -215,7 +217,9 @@ class TestTcpServerRoundTrip(unittest.IsolatedAsyncioTestCase):
         qs = frames[-1].queueStatus
         self.assertEqual(qs.mesh_packet_id, 0x7777)
         self.assertEqual(qs.res, 0)
-        self.assertEqual(self.tx.sent[-1], ("ping from phone", 0xFFFFFFFF, 0, False))
+        self.assertEqual(
+            self.tx.sent[-1], ("ping from phone", 0xFFFFFFFF, 0, False, 0x7777)
+        )
 
     async def test_inbound_packet_streamed_to_client(self):
         await self._do_want_config()

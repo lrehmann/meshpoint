@@ -294,6 +294,7 @@ class MeshtasticTcpServer:
             destination=destination,
             channel=channel,
             want_ack=want_ack,
+            packet_id=orig_id,
         )
         if not result.success:
             logger.warning(

@@ -279,11 +279,13 @@ class TestMeshtasticTextSend(unittest.IsolatedAsyncioTestCase):
             destination=f"{peer_id:08x}",
             channel=0,
             want_ack=True,
+            packet_id=0xEACDE3D6,
         )
 
         self.assertTrue(result.success, result.error)
         self.assertEqual(len(wrapper.sent), 1)
         raw = wrapper.sent[0]
+        self.assertEqual(raw[8:12], bytes.fromhex("d6e3cdea"))
         self.assertEqual(raw[13], 0x08)
 
         decoder = MeshtasticDecoder(crypto)
@@ -303,6 +305,7 @@ class TestMeshtasticTextSend(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decoded.source_id, f"{source_id:08x}")
         self.assertEqual(decoded.destination_id, f"{peer_id:08x}")
         self.assertEqual(decoded.channel_hash, 0x08)
+        self.assertEqual(decoded.packet_id, "eacde3d6")
         self.assertEqual(decoded.decoded_payload, {"text": "direct channel text"})
         self.assertTrue(decoded.want_ack)
 
