@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 # streamed packets rather than letting the buffer grow without bound.
 _CLIENT_QUEUE_MAX = 256
 _READ_CHUNK = 4096
+_APP_ACK_REPLAY_DELAYS = (0.25, 1.5, 4.0)
 
 
 class ClientConnection:
@@ -300,17 +301,77 @@ class MeshtasticTcpServer:
             logger.warning(
                 "TCP API: send from %s failed: %s", conn.peer, result.error
             )
+        logger.info(
+            "TCP API: app text TX peer=%s id=%08x dest=%08x ch=%d "
+            "want_ack=%s success=%s airtime=%d error=%r",
+            conn.peer,
+            orig_id,
+            destination,
+            channel,
+            want_ack,
+            result.success,
+            getattr(result, "airtime_ms", 0),
+            result.error,
+        )
         await self._ack(conn, orig_id, success=result.success)
         if result.success and want_ack:
-            from src.tcpapi import protocol as proto
-
-            ack = proto.build_routing_ack(
-                packet_id=orig_id,
-                from_node=destination,
-                to_node=self._my_node_num,
-                channel=channel,
+            asyncio.create_task(
+                self._replay_app_routing_ack(
+                    conn,
+                    packet_id=orig_id,
+                    destination=destination,
+                    channel=channel,
+                )
             )
-            await conn.send(encode_frame(ack.SerializeToString()))
+
+    async def _replay_app_routing_ack(
+        self,
+        conn: ClientConnection,
+        *,
+        packet_id: int,
+        destination: int,
+        channel: int,
+    ) -> None:
+        for delay in _APP_ACK_REPLAY_DELAYS:
+            await asyncio.sleep(delay)
+            if conn not in self._clients:
+                return
+            await self._send_app_routing_ack(
+                conn,
+                packet_id=packet_id,
+                destination=destination,
+                channel=channel,
+                delay=delay,
+            )
+
+    async def _send_app_routing_ack(
+        self,
+        conn: ClientConnection,
+        *,
+        packet_id: int,
+        destination: int,
+        channel: int,
+        delay: float,
+    ) -> None:
+        from src.tcpapi import protocol as proto
+
+        ack = proto.build_routing_ack(
+            packet_id=packet_id,
+            from_node=destination,
+            to_node=self._my_node_num,
+            channel=channel,
+        )
+        logger.info(
+            "TCP API: app routing ACK peer=%s id=%08x from=%08x to=%08x "
+            "ch=%d delay=%.2fs",
+            conn.peer,
+            packet_id,
+            destination,
+            self._my_node_num,
+            channel,
+            delay,
+        )
+        await conn.send(encode_frame(ack.SerializeToString()))
 
     async def _ack(
         self, conn: ClientConnection, packet_id: int, *, success: bool
