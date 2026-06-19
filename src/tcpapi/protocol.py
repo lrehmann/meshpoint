@@ -536,6 +536,33 @@ def build_queue_status(
     return fr
 
 
+def build_routing_ack(
+    *, packet_id: int, from_node: int, to_node: int, channel: int = 0
+) -> "mesh_pb2.FromRadio":
+    """Build a ROUTING_APP success ACK for an app-originated packet.
+
+    Meshtastic apps keep direct-message bubbles pending until they see a
+    ROUTING_APP packet whose decoded request_id matches the original packet id.
+    Meshpoint's dashboard can report local TX queue success, but TCP clients
+    need this app-level ACK shape to clear their UI.
+    """
+    routing = mesh_pb2.Routing()
+    routing.error_reason = mesh_pb2.Routing.Error.Value("NONE")
+
+    mp = mesh_pb2.MeshPacket()
+    mp.id = packet_id & 0xFFFFFFFF
+    setattr(mp, "from", from_node & 0xFFFFFFFF)
+    mp.to = to_node & 0xFFFFFFFF
+    mp.channel = channel
+    mp.decoded.portnum = portnum_for_packet_type(PacketType.ROUTING, fallback=0)
+    mp.decoded.payload = routing.SerializeToString()
+    mp.decoded.request_id = packet_id & 0xFFFFFFFF
+
+    fr = mesh_pb2.FromRadio()
+    fr.packet.CopyFrom(mp)
+    return fr
+
+
 def _routing_error_no_response() -> int:
     try:
         return mesh_pb2.Routing.Error.Value("NO_RESPONSE")

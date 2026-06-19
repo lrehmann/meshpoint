@@ -198,6 +198,24 @@ class TestPacketToFromRadio(unittest.TestCase):
         routing.ParseFromString(fr.packet.decoded.payload)
         self.assertEqual(routing.error_reason, mesh_pb2.Routing.Error.Value("NONE"))
 
+    def test_build_routing_ack(self) -> None:
+        fr = proto.build_routing_ack(
+            packet_id=0xEACDE3D6,
+            from_node=0xDE3ED0F6,
+            to_node=0x890574FE,
+            channel=0,
+        )
+        self.assertEqual(fr.WhichOneof("payload_variant"), "packet")
+        mp = fr.packet
+        self.assertEqual(mp.id, 0xEACDE3D6)
+        self.assertEqual(getattr(mp, "from"), 0xDE3ED0F6)
+        self.assertEqual(mp.to, 0x890574FE)
+        self.assertEqual(mp.decoded.portnum, portnums_pb2.PortNum.Value("ROUTING_APP"))
+        self.assertEqual(mp.decoded.request_id, 0xEACDE3D6)
+        routing = mesh_pb2.Routing()
+        routing.ParseFromString(mp.decoded.payload)
+        self.assertEqual(routing.error_reason, mesh_pb2.Routing.Error.Value("NONE"))
+
     def test_encrypted_variant(self) -> None:
         pkt = self._text_packet(
             packet_type=PacketType.ENCRYPTED, decrypted=False,

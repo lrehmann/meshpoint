@@ -301,6 +301,16 @@ class MeshtasticTcpServer:
                 "TCP API: send from %s failed: %s", conn.peer, result.error
             )
         await self._ack(conn, orig_id, success=result.success)
+        if result.success and want_ack:
+            from src.tcpapi import protocol as proto
+
+            ack = proto.build_routing_ack(
+                packet_id=orig_id,
+                from_node=destination,
+                to_node=self._my_node_num,
+                channel=channel,
+            )
+            await conn.send(encode_frame(ack.SerializeToString()))
 
     async def _ack(
         self, conn: ClientConnection, packet_id: int, *, success: bool

@@ -221,6 +221,35 @@ class TestTcpServerRoundTrip(unittest.IsolatedAsyncioTestCase):
             self.tx.sent[-1], ("ping from phone", 0xFFFFFFFF, 0, False, 0x7777)
         )
 
+    async def test_outbound_text_want_ack_gets_routing_ack(self):
+        await self._do_want_config()
+        tr = mesh_pb2.ToRadio()
+        tr.packet.to = 0xA1B2C3D4
+        tr.packet.channel = 0
+        tr.packet.id = 0xEACDE3D6
+        tr.packet.want_ack = True
+        tr.packet.decoded.portnum = portnums_pb2.PortNum.Value("TEXT_MESSAGE_APP")
+        tr.packet.decoded.payload = b"ping with ack"
+        self.writer.write(encode_frame(tr.SerializeToString()))
+        await self.writer.drain()
+
+        frames = await self._read_frames(
+            lambda fr: (
+                fr.WhichOneof("payload_variant") == "packet"
+                and fr.packet.decoded.request_id == 0xEACDE3D6
+            )
+        )
+        mp = frames[-1].packet
+        self.assertEqual(mp.decoded.portnum, portnums_pb2.PortNum.Value("ROUTING_APP"))
+        self.assertEqual(getattr(mp, "from"), 0xA1B2C3D4)
+        self.assertEqual(mp.to, 0x12345678)
+        routing = mesh_pb2.Routing()
+        routing.ParseFromString(mp.decoded.payload)
+        self.assertEqual(routing.error_reason, mesh_pb2.Routing.Error.Value("NONE"))
+        self.assertEqual(
+            self.tx.sent[-1], ("ping with ack", 0xA1B2C3D4, 0, True, 0xEACDE3D6)
+        )
+
     async def test_inbound_packet_streamed_to_client(self):
         await self._do_want_config()
         # Emit a decoded RX packet from the pipeline; it must reach the client.
