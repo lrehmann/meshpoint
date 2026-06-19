@@ -287,9 +287,6 @@ class TxService:
         dest_int = self._resolve_destination(destination, Protocol.MESHTASTIC)
         packet_id = self._next_packet_id()
         channel_hash, channel_key = self._resolve_channel(channel)
-        recipient_pubkey = None
-        if dest_int != BROADCAST_ADDR_MT and self._crypto is not None:
-            recipient_pubkey = self._crypto.lookup_public_key(dest_int)
 
         hop_limit = self._config.hop_limit if self._config else DEFAULT_HOP_LIMIT
         packet_bytes = builder.build_text_message(
@@ -302,7 +299,11 @@ class TxService:
             hop_limit=hop_limit,
             hop_start=hop_limit,
             want_ack=want_ack,
-            recipient_public_key=recipient_pubkey,
+            # User-originated text stays on the configured channel PSK even
+            # for direct destinations. PKI is only reliable after both peers
+            # have exchanged fresh NodeInfo public keys, which cannot be
+            # assumed for app/dashboard sends through this bridge.
+            recipient_public_key=None,
         )
         if packet_bytes is None:
             return SendResult(
