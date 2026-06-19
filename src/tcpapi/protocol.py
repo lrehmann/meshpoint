@@ -45,6 +45,8 @@ BROADCAST_ADDR = 0xFFFFFFFF
 HW_MODEL_PRIVATE_HW = 255
 _ROLE_CLIENT = config_pb2.Config.DeviceConfig.Role.Value("CLIENT")
 _MIN_APP_VERSION = 30200
+_CLIENT_APP_MIN_VERSION = (2, 5, 18)
+_CLIENT_APP_COMPAT_FIRMWARE_VERSION = "2.6.0.meshpoint"
 
 # Config oneof variants sent with default values during want_config so the
 # app's config download completes cleanly (device + lora carry real data).
@@ -389,7 +391,7 @@ def _module_configs() -> list["mesh_pb2.FromRadio"]:
 
 def _metadata(firmware_version: str, tx_enabled: bool) -> "mesh_pb2.FromRadio":
     meta = mesh_pb2.DeviceMetadata()
-    meta.firmware_version = firmware_version
+    meta.firmware_version = _client_firmware_version(firmware_version)
     meta.hw_model = HW_MODEL_PRIVATE_HW
     meta.role = _ROLE_CLIENT
     meta.hasWifi = True
@@ -399,6 +401,29 @@ def _metadata(firmware_version: str, tx_enabled: bool) -> "mesh_pb2.FromRadio":
     fr = mesh_pb2.FromRadio()
     fr.metadata.CopyFrom(meta)
     return fr
+
+
+def _client_firmware_version(firmware_version: str) -> str:
+    """Return a firmware string Meshtastic apps accept during version checks.
+
+    The Apple app treats the last dotted component as a build/hash suffix, then
+    compares the remaining version against its minimum supported firmware. A
+    Meshpoint version such as ``0.7.6`` is valid for Meshpoint but makes the app
+    reject the TCP endpoint as old firmware, so advertise API compatibility here
+    without changing Meshpoint's own version elsewhere.
+    """
+    raw = (firmware_version or "").strip()
+    parts = raw.split(".")
+    try:
+        version = tuple(int(part) for part in parts[:3])
+    except ValueError:
+        return _CLIENT_APP_COMPAT_FIRMWARE_VERSION
+
+    if len(version) != 3 or version < _CLIENT_APP_MIN_VERSION:
+        return _CLIENT_APP_COMPAT_FIRMWARE_VERSION
+    if len(parts) == 3:
+        return f"{raw}.meshpoint"
+    return raw
 
 
 # --------------------------------------------------------------------------

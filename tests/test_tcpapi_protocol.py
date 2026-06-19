@@ -96,6 +96,11 @@ class TestWantConfig(unittest.TestCase):
         self.assertIn("channel", kinds)
         self.assertIn("metadata", kinds)
 
+    def test_metadata_uses_app_compatible_firmware_version(self) -> None:
+        frames = self._build()
+        meta = next(f for f in frames if f.WhichOneof("payload_variant") == "metadata")
+        self.assertEqual(meta.metadata.firmware_version, "2.6.0.meshpoint")
+
     def test_my_info_node_num(self) -> None:
         frames = self._build()
         my = next(f for f in frames if f.WhichOneof("payload_variant") == "my_info")
