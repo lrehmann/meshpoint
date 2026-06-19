@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from meshtastic.protobuf import config_pb2, portnums_pb2
+from meshtastic.protobuf import config_pb2, mesh_pb2, portnums_pb2
 
 from src.models.packet import Packet, PacketType, Protocol
 from src.models.signal import SignalMetrics
@@ -190,10 +190,13 @@ class TestPacketToFromRadio(unittest.TestCase):
         pkt = self._text_packet(
             packet_type=PacketType.ROUTING,
             decoded_payload={"request_id": 0xDEAD},
-            raw_app_payload=b"\x08\x00",
+            raw_app_payload=b"",
         )
         fr = proto.packet_to_from_radio(pkt)
         self.assertEqual(fr.packet.decoded.request_id, 0xDEAD)
+        routing = mesh_pb2.Routing()
+        routing.ParseFromString(fr.packet.decoded.payload)
+        self.assertEqual(routing.error_reason, mesh_pb2.Routing.Error.Value("NONE"))
 
     def test_encrypted_variant(self) -> None:
         pkt = self._text_packet(

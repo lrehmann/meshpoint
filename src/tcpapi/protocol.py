@@ -467,7 +467,7 @@ def packet_to_from_radio(
             return _maybe_encrypted(mp, packet, forward_encrypted)
         mp.channel = channel_index
         mp.decoded.portnum = portnum
-        mp.decoded.payload = packet.raw_app_payload
+        mp.decoded.payload = _app_payload(packet)
         request_id = (packet.decoded_payload or {}).get("request_id")
         if request_id:
             try:
@@ -502,6 +502,14 @@ def _resolve_portnum(packet: Packet) -> Optional[int]:
     if isinstance(val, int):
         return val
     return None
+
+
+def _app_payload(packet: Packet) -> bytes:
+    if packet.packet_type == PacketType.ROUTING and not packet.raw_app_payload:
+        routing = mesh_pb2.Routing()
+        routing.error_reason = mesh_pb2.Routing.Error.Value("NONE")
+        return routing.SerializeToString()
+    return packet.raw_app_payload or b""
 
 
 # --------------------------------------------------------------------------
