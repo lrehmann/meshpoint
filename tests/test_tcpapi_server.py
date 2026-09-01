@@ -52,6 +52,14 @@ class _FakePipeline:
             cb(packet)
 
 
+class _FakeMessageRepo:
+    def __init__(self):
+        self.sent = []
+
+    async def save_sent(self, **kwargs):
+        self.sent.append(kwargs)
+
+
 class _SendResult:
     def __init__(self, ok):
         self.success = ok
@@ -134,9 +142,11 @@ class TestTcpServerRoundTrip(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.pipeline = _FakePipeline()
         self.tx = _FakeTx()
+        self.message_repo = _FakeMessageRepo()
         self.server = MeshtasticTcpServer(
             config=_make_config(), pipeline=self.pipeline,
             tx_service=self.tx, identity=_identity(),
+            message_repo=self.message_repo,
         )
         await self.server.start()
         self.port = self.server._server.sockets[0].getsockname()[1]
@@ -220,6 +230,35 @@ class TestTcpServerRoundTrip(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.tx.sent[-1], ("ping from phone", 0xFFFFFFFF, 0, False, 0x7777)
         )
+
+    async def test_outbound_broadcast_persists_channel_conversation(self):
+        """Channel-0 broadcasts must appear in the existing LongFast conversation."""
+        await self._do_want_config()
+
+        tr = mesh_pb2.ToRadio()
+        tr.packet.to = 0xFFFFFFFF
+        tr.packet.channel = 0
+        tr.packet.id = 0x8888
+        tr.packet.decoded.portnum = portnums_pb2.PortNum.Value("TEXT_MESSAGE_APP")
+        tr.packet.decoded.payload = b"history regression"
+
+        self.writer.write(encode_frame(tr.SerializeToString()))
+        await self.writer.drain()
+
+        await self._read_frames(
+            lambda fr: fr.WhichOneof("payload_variant") == "queueStatus"
+        )
+
+        self.assertTrue(self.message_repo.sent)
+        saved = self.message_repo.sent[-1]
+
+        self.assertEqual(saved["text"], "history regression")
+        self.assertEqual(saved["node_id"], "broadcast:meshtastic:0")
+        self.assertEqual(saved["node_name"], "LongFast")
+        self.assertEqual(saved["protocol"], "meshtastic")
+        self.assertEqual(saved["channel"], 0)
+        self.assertEqual(saved["packet_id"], "00008888")
+        self.assertEqual(saved["status"], "sent")
 
     async def test_outbound_text_want_ack_gets_routing_ack(self):
         await self._do_want_config()
