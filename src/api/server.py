@@ -226,9 +226,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             pipeline, config, identity, auth_subsystem, tx_service, message_repo
         )
         _init_dangerous_registry(pipeline)
+
+        tcp_api_server = _build_tcp_api_server(
+            config, pipeline, tx_service, identity, message_repo
+        )
+        if tcp_api_server is not None:
+            await tcp_api_server.start()
+
         print_banner(config)
         logger.info("Meshpoint started -- listening for packets")
         yield
+        if tcp_api_server is not None:
+            await tcp_api_server.stop()
         if _spectral_scan_service is not None:
             await _spectral_scan_service.stop()
         if _noise_floor_emitter_task is not None:
@@ -653,6 +662,29 @@ def _build_tx_service(
         tx_svc.meshtastic_enabled, tx_svc.meshcore_enabled,
     )
     return tx_svc
+
+
+def _build_tcp_api_server(
+    config: AppConfig,
+    coord: PipelineCoordinator,
+    tx_service: TxService | None,
+    identity: DeviceIdentity,
+    message_repo: MessageRepository,
+):
+    """Build the Meshtastic TCP client-API server if enabled in config.
+
+    Kept self-contained in src/tcpapi/ and imported lazily so the rest of
+    the app never depends on it (or on the meshtastic protobuf runtime)
+    unless ``tcp_api.enabled`` is set.
+    """
+    try:
+        from src.tcpapi.server import build_tcp_api_server
+    except ImportError:
+        logger.warning("TCP API unavailable -- meshtastic package not installed")
+        return None
+    return build_tcp_api_server(
+        config, coord, tx_service, identity, message_repo
+    )
 
 
 def _wire_native_relay(

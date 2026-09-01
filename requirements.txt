@@ -13,3 +13,6 @@ meshcore>=2.1.0
 paho-mqtt>=2.1.0
 bcrypt>=4.2.0
 PyJWT>=2.10.0
+# Optional: mDNS/Bonjour advertisement for the Meshtastic TCP API (tcp_api.mdns).
+# The TCP server runs without it; discovery just falls back to reachable-by-IP.
+zeroconf>=0.130.0

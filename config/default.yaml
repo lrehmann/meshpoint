@@ -139,3 +139,24 @@ location:
   update_interval_seconds: 5
   # Minimum acceptable fix mode: 0=any (incl. no-fix), 1=2D, 2=3D.
   min_fix_quality: 1
+
+tcp_api:
+  # Meshtastic client "stream API" over TCP. When enabled, the official
+  # Meshtastic phone apps can connect to this Meshpoint at <pi-ip>:4403
+  # and use it as a node (channels, DMs, node list, map). Sending from
+  # the app requires transmit.enabled above (the app's outbound packets
+  # are transmitted via the onboard SX1302). The Meshtastic stream
+  # protocol has no auth -- only enable on a trusted LAN.
+  enabled: false
+  host: "0.0.0.0"
+  port: 4403
+  # Advertise over _meshtastic._tcp (Bonjour/zeroconf) so apps auto-discover
+  # the node on the LAN. Needs the optional `zeroconf` package; degrades to
+  # "reachable by IP" if it is missing.
+  mdns: true
+  # Also relay packets the Meshpoint could not decrypt, so a phone that holds
+  # the channel PSK can decode them locally.
+  forward_encrypted: true
+  # Ceiling on nodes sent in the initial node_info burst (the live packet
+  # stream keeps the app's node DB current after that).
+  max_nodes: 200

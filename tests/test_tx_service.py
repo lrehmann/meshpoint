@@ -5,8 +5,11 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from src.config import TransmitConfig
+from src.config import RadioConfig, TransmitConfig
+from src.decode.crypto_service import CryptoService
+from src.decode.meshtastic_decoder import MeshtasticDecoder
 from src.models.packet import Protocol
+from src.models.signal import SignalMetrics
 from src.transmit.tx_service import (
     BROADCAST_ADDR_MC,
     BROADCAST_ADDR_MT,
@@ -14,6 +17,21 @@ from src.transmit.tx_service import (
     RESERVED_NODE_IDS,
     TxService,
 )
+
+
+class _FakeWrapper:
+    def __init__(self):
+        self.sent = []
+
+    def get_time_on_air(self, tx_pkt):
+        return 100
+
+    def get_tx_status(self, rf_chain):
+        return 2
+
+    def send(self, tx_pkt):
+        self.sent.append(bytes(tx_pkt.payload[: tx_pkt.size]))
+        return 0
 
 
 class TestPresetDisplayNames(unittest.TestCase):
@@ -236,6 +254,60 @@ class TestPersistDerivedNodeId(unittest.TestCase):
             )
         self.assertEqual(svc.node_id_source, "derived")
         self.assertNotEqual(svc.source_node_id, 0)
+
+
+class TestMeshtasticTextSend(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_text_uses_channel_psk_even_with_peer_public_key(self):
+        peer_id = 0xDE3ED0F6
+        source_id = 0x890574FE
+        crypto = CryptoService(default_key_b64="AQ==")
+        crypto.register_public_key(peer_id, b"\x11" * 32)
+        wrapper = _FakeWrapper()
+        cfg = TransmitConfig(enabled=True, node_id=source_id, hop_limit=3)
+
+        svc = TxService(
+            wrapper=wrapper,
+            crypto=crypto,
+            transmit_config=cfg,
+            radio_config=RadioConfig(region="US", frequency_mhz=906.875),
+            primary_channel_name="LongFast",
+            persist_derived_node_id=False,
+        )
+
+        result = await svc.send_text(
+            "direct channel text",
+            destination=f"{peer_id:08x}",
+            channel=0,
+            want_ack=True,
+            packet_id=0xEACDE3D6,
+        )
+
+        self.assertTrue(result.success, result.error)
+        self.assertEqual(len(wrapper.sent), 1)
+        raw = wrapper.sent[0]
+        self.assertEqual(raw[8:12], bytes.fromhex("d6e3cdea"))
+        self.assertEqual(raw[13], 0x08)
+
+        decoder = MeshtasticDecoder(crypto)
+        decoded = decoder.decode(
+            raw,
+            SignalMetrics(
+                rssi=-60,
+                snr=6,
+                frequency_mhz=906.875,
+                spreading_factor=11,
+                bandwidth_khz=250.0,
+            ),
+        )
+        self.assertIsNotNone(decoded)
+        assert decoded is not None
+        self.assertTrue(decoded.decrypted)
+        self.assertEqual(decoded.source_id, f"{source_id:08x}")
+        self.assertEqual(decoded.destination_id, f"{peer_id:08x}")
+        self.assertEqual(decoded.channel_hash, 0x08)
+        self.assertEqual(decoded.packet_id, "eacde3d6")
+        self.assertEqual(decoded.decoded_payload, {"text": "direct channel text"})
+        self.assertTrue(decoded.want_ack)
 
 
 if __name__ == "__main__":

@@ -438,6 +438,32 @@ MeshCore transmission uses the USB companion node: configure its serial port und
 
 ---
 
+## Meshtastic App over TCP (`tcp_api`)
+
+Let the official Meshtastic phone apps (iOS / Android) connect to the Meshpoint directly over the local network and use it as a node — channels, direct messages, node list, and map — the same way they connect to a physical Meshtastic device over WiFi. The Meshpoint speaks the standard Meshtastic "stream API" on TCP port 4403.
+
+```yaml
+tcp_api:
+  enabled: false            # opt-in; trusted LAN only (the protocol has no auth)
+  host: "0.0.0.0"
+  port: 4403                # Meshtastic default TCP port
+  mdns: true                # advertise over _meshtastic._tcp for auto-discovery
+  forward_encrypted: true   # also relay packets the Meshpoint couldn't decrypt
+  max_nodes: 200            # ceiling on the initial node_info burst
+```
+
+**`enabled`**: off by default. The Meshtastic stream protocol is unauthenticated, so only enable this on a network you trust.
+
+**Connecting**: in the Meshtastic app, add a node over the network (TCP) and point it at `<pi-ip>:4403`. With `mdns: true` the app discovers the Meshpoint automatically (it appears in the app's network device list); mDNS uses the optional `zeroconf` package, and the server still works by IP if it is absent.
+
+**Sending from the app** requires `transmit: enabled` above — the app's outbound messages are transmitted through the onboard SX1302. With transmit disabled the app connects **read-only**: it sees everything the Meshpoint hears, but message sends are rejected.
+
+**`forward_encrypted`**: when `true`, packets the Meshpoint could not decrypt are still relayed to the app, so a phone that holds the channel PSK can decode them locally.
+
+See [TCP Client API](plans/TCP-CLIENT-API.md) for the design and current limitations (text-only TX in this release).
+
+---
+
 ## Upstream (Cloud)
 
 ```yaml
@@ -748,6 +774,14 @@ dashboard:             # local web UI
   host: "0.0.0.0"
   port: 8080
   static_dir: "frontend"
+
+tcp_api:               # Meshtastic phone-app access over TCP (off by default)
+  enabled: false
+  host: "0.0.0.0"
+  port: 4403
+  mdns: true
+  forward_encrypted: true
+  max_nodes: 200
 ```
 
 You only need to put the keys you want to override into `local.yaml`. Every key omitted from `local.yaml` falls back to the value in `config/default.yaml`.

@@ -235,6 +235,43 @@ class TransmitConfig:
 
 
 @dataclass
+class TcpApiConfig:
+    """Meshtastic client TCP API server (the "stream API", port 4403).
+
+    When enabled, the Meshpoint exposes the standard Meshtastic
+    length-delimited protobuf stream over TCP so the official
+    Meshtastic phone apps (iOS/Android) can connect to it over the
+    local network and treat it as a node: channels, direct messages,
+    node list, and map all populate from the same capture/decode
+    pipeline that drives the dashboard. Outbound messages from the app
+    are transmitted through the onboard SX1302 via the existing
+    transmit path, so sending requires ``transmit.enabled``; with
+    transmit disabled the app connects read-only.
+
+    Disabled by default -- opt-in via local.yaml. The Meshtastic
+    stream protocol has no authentication, so only enable this on a
+    trusted LAN.
+
+    ``mdns`` advertises the node over ``_meshtastic._tcp`` (Bonjour /
+    zeroconf) so the phone apps discover it automatically; it degrades
+    gracefully to "reachable by IP" when the ``zeroconf`` package is
+    unavailable. ``forward_encrypted`` also relays packets the
+    Meshpoint could not decrypt so a phone holding the channel PSK can
+    decode them itself.
+    """
+
+    enabled: bool = False
+    host: str = "0.0.0.0"  # nosec B104 -- intentional for local device API
+    port: int = 4403
+    mdns: bool = True
+    forward_encrypted: bool = True
+    # Max nodes advertised in the want_config node_info burst. The app
+    # also learns nodes from the live POSITION/NODEINFO packet stream,
+    # so this is just the initial snapshot ceiling.
+    max_nodes: int = 200
+
+
+@dataclass
 class LocationConfig:
     """Where the Meshpoint's reported lat/lon/alt comes from.
 
@@ -319,6 +356,7 @@ class AppConfig:
     transmit: TransmitConfig = field(default_factory=TransmitConfig)
     web_auth: WebAuthConfig = field(default_factory=WebAuthConfig)
     location: LocationConfig = field(default_factory=LocationConfig)
+    tcp_api: TcpApiConfig = field(default_factory=TcpApiConfig)
 
 
 def _resolve_radio_frequency(radio: "RadioConfig") -> None:
@@ -401,6 +439,7 @@ def _apply_yaml(cfg: AppConfig, path: Path) -> None:
         "transmit": cfg.transmit,
         "web_auth": cfg.web_auth,
         "location": cfg.location,
+        "tcp_api": cfg.tcp_api,
     }
 
     unknown_keys: list[str] = []

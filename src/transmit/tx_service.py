@@ -148,11 +148,12 @@ class TxService:
         protocol: str = "meshtastic",
         channel: int = 0,
         want_ack: bool = False,
+        packet_id: int | None = None,
     ) -> SendResult:
         """Send a text message over the specified protocol."""
         if protocol.lower() in ("meshtastic", "mt"):
             return await self._send_meshtastic(
-                text, destination, channel, want_ack
+                text, destination, channel, want_ack, packet_id=packet_id
             )
         elif protocol.lower() in ("meshcore", "mc"):
             return await self._send_meshcore(text, destination, channel)
@@ -267,6 +268,8 @@ class TxService:
         destination: int | str,
         channel: int,
         want_ack: bool,
+        *,
+        packet_id: int | None = None,
     ) -> SendResult:
         """Build and transmit a Meshtastic packet via the SX1261."""
         if not self.meshtastic_enabled:
@@ -285,11 +288,12 @@ class TxService:
             )
 
         dest_int = self._resolve_destination(destination, Protocol.MESHTASTIC)
-        packet_id = self._next_packet_id()
+        packet_id = (
+            self._next_packet_id()
+            if packet_id is None
+            else int(packet_id) & 0xFFFFFFFF
+        )
         channel_hash, channel_key = self._resolve_channel(channel)
-        recipient_pubkey = None
-        if dest_int != BROADCAST_ADDR_MT and self._crypto is not None:
-            recipient_pubkey = self._crypto.lookup_public_key(dest_int)
 
         hop_limit = self._config.hop_limit if self._config else DEFAULT_HOP_LIMIT
         packet_bytes = builder.build_text_message(
@@ -302,7 +306,11 @@ class TxService:
             hop_limit=hop_limit,
             hop_start=hop_limit,
             want_ack=want_ack,
-            recipient_public_key=recipient_pubkey,
+            # User-originated text stays on the configured channel PSK even
+            # for direct destinations. PKI is only reliable after both peers
+            # have exchanged fresh NodeInfo public keys, which cannot be
+            # assumed for app/dashboard sends through this bridge.
+            recipient_public_key=None,
         )
         if packet_bytes is None:
             return SendResult(
