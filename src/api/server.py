@@ -228,7 +228,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         _init_dangerous_registry(pipeline)
 
         tcp_api_server = _build_tcp_api_server(
-            config, pipeline, tx_service, identity
+            config, pipeline, tx_service, identity, message_repo
         )
         if tcp_api_server is not None:
             await tcp_api_server.start()
@@ -669,6 +669,7 @@ def _build_tcp_api_server(
     coord: PipelineCoordinator,
     tx_service: TxService | None,
     identity: DeviceIdentity,
+    message_repo: MessageRepository,
 ):
     """Build the Meshtastic TCP client-API server if enabled in config.
 
@@ -681,7 +682,9 @@ def _build_tcp_api_server(
     except ImportError:
         logger.warning("TCP API unavailable -- meshtastic package not installed")
         return None
-    return build_tcp_api_server(config, coord, tx_service, identity)
+    return build_tcp_api_server(
+        config, coord, tx_service, identity, message_repo
+    )
 
 
 def _wire_native_relay(

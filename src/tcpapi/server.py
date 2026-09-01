@@ -33,6 +33,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from src.config import AppConfig
     from src.coordinator import PipelineCoordinator
     from src.models.device_identity import DeviceIdentity
+    from src.storage.message_repository import MessageRepository
     from src.transmit.tx_service import TxService
 
 logger = logging.getLogger(__name__)
@@ -125,12 +126,16 @@ class MeshtasticTcpServer:
         pipeline: "PipelineCoordinator",
         tx_service: Optional["TxService"],
         identity: "DeviceIdentity",
+        message_repo: Optional["MessageRepository"] = None,
     ):
         self._config = config
         self._cfg = config.tcp_api
         self._pipeline = pipeline
         self._tx_service = tx_service
         self._identity = identity
+
+        self._message_repo = message_repo
+
         self._clients: set[ClientConnection] = set()
         self._server: Optional[asyncio.AbstractServer] = None
         self._mdns: Optional[MdnsAdvertiser] = None
@@ -297,6 +302,39 @@ class MeshtasticTcpServer:
             want_ack=want_ack,
             packet_id=orig_id,
         )
+        if result.success and self._message_repo is not None:
+            try:
+                from src.storage.message_repository import BROADCAST_NODE_MT
+
+                if destination == 0xFFFFFFFF:
+                    node_id = f"{BROADCAST_NODE_MT}:{channel}"
+                    node_name = "LongFast" if channel == 0 else f"Channel {channel}"
+                else:
+                    node_id = f"{destination:08x}"
+                    node_name = f"!{destination:08x}"
+
+                await self._message_repo.save_sent(
+                    text=text,
+                    node_id=node_id,
+                    node_name=node_name,
+                    protocol="meshtastic",
+                    channel=channel,
+                    packet_id=f"{orig_id:08x}",
+                    status="sent",
+                )
+
+                logger.info(
+                    "TCP API: saved app TX to message history "
+                    "id=%08x node=%s channel=%d",
+                    orig_id,
+                    node_id,
+                    channel,
+                )
+            except Exception:
+                logger.exception(
+                    "TCP API: failed saving app TX to message history"
+                )
+
         if not result.success:
             logger.warning(
                 "TCP API: send from %s failed: %s", conn.peer, result.error
@@ -467,6 +505,7 @@ def build_tcp_api_server(
     pipeline: "PipelineCoordinator",
     tx_service: Optional["TxService"],
     identity: "DeviceIdentity",
+    message_repo: Optional["MessageRepository"] = None,
 ) -> Optional[MeshtasticTcpServer]:
     """Construct the server when enabled, else return None.
 
@@ -480,4 +519,5 @@ def build_tcp_api_server(
         pipeline=pipeline,
         tx_service=tx_service,
         identity=identity,
+        message_repo=message_repo,
     )
